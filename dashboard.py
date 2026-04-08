@@ -6,15 +6,19 @@ import plotly.graph_objects as go
 
 import sqlite3
 
+import os
+
  
 
-# -----------------------------
+# =============================
 
 # 1. Instellingen
 
-# -----------------------------
+# =============================
 
 DB_FILE = "roadmap.db"
+
+BACKUP_FILE = "roadmap_backup.csv"
 
 START_JAAR = 2025
 
@@ -28,11 +32,11 @@ st.title("📉 Projectgebaseerde Roadmap: Stoomvrij 2035")
 
  
 
-# -----------------------------
+# =============================
 
 # 2. Database helpers
 
-# -----------------------------
+# =============================
 
 def get_conn():
 
@@ -82,23 +86,21 @@ def laad_data():
 
     if df.empty:
 
-        # startdata
-
         df = pd.DataFrame({
 
             "Jaar": [2025],
 
             "Besparing (Ton)": [0.0],
 
-            "Project / Maatregel": ["Eerste project..."],
-
-            "Ref_Verbruik": [5000.0]
+            "Project / Maatregel": ["Eerste project..."]
 
         })
 
         ref = 5000.0
 
     else:
+
+        ref = float(df["ref_verbruik"].iloc[0])
 
         df = df.rename(columns={
 
@@ -109,8 +111,6 @@ def laad_data():
             "project": "Project / Maatregel"
 
         })
-
-        ref = float(df["ref_verbruik"].iloc[0])
 
         df = df.drop(columns=["ref_verbruik"])
 
@@ -125,10 +125,6 @@ def opslaan_data(df, ref):
     conn = get_conn()
 
     c = conn.cursor()
-
- 
-
-    # Alles resetten (gedeelde tabel)
 
     c.execute("DELETE FROM roadmap")
 
@@ -152,11 +148,21 @@ def opslaan_data(df, ref):
 
  
 
-# -----------------------------
+def maak_csv_backup(df, ref):
 
-# 3. Init
+    backup_df = df.copy()
 
-# -----------------------------
+    backup_df["Ref_Verbruik"] = ref
+
+    backup_df.to_csv(BACKUP_FILE, index=False)
+
+ 
+
+# =============================
+
+# 3. Initialisatie
+
+# =============================
 
 init_db()
 
@@ -172,11 +178,11 @@ if "df_roadmap" not in st.session_state:
 
  
 
-# -----------------------------
+# =============================
 
-# 4. Sidebar
+# 4. Sidebar – instellingen & backup
 
-# -----------------------------
+# =============================
 
 st.sidebar.header("⚙️ Basisinstellingen")
 
@@ -192,15 +198,43 @@ huidig_ref = st.sidebar.number_input(
 
  
 
-# -----------------------------
+st.sidebar.divider()
 
-# 5. Data editor
+st.sidebar.subheader("💾 Back-up")
 
-# -----------------------------
+ 
+
+if os.path.exists(BACKUP_FILE):
+
+    with open(BACKUP_FILE, "rb") as f:
+
+        st.sidebar.download_button(
+
+            label="⬇️ Download CSV-backup",
+
+            data=f,
+
+            file_name="roadmap_backup.csv",
+
+            mime="text/csv"
+
+        )
+
+else:
+
+    st.sidebar.caption("Nog geen backup beschikbaar")
+
+ 
+
+# =============================
+
+# 5. Dynamische tabel
+
+# =============================
 
 st.subheader("Voeg projecten toe per jaar")
 
-st.info("Gebruik de tabel hieronder om projecten toe te voegen. Je kunt meerdere regels voor hetzelfde jaar maken.")
+st.info("Je kunt meerdere regels per jaar toevoegen. De data is gedeeld voor alle gebruikers.")
 
  
 
@@ -258,31 +292,37 @@ edited_df = st.data_editor(
 
  
 
-# -----------------------------
+# =============================
 
-# 6. Opslaan (SQLite)
+# 6. Opslaan (SQLite + CSV-backup)
 
-# -----------------------------
+# =============================
 
 if st.sidebar.button("💾 Alles Opslaan"):
 
     opslaan_data(edited_df, huidig_ref)
 
+    maak_csv_backup(edited_df, huidig_ref)
+
+ 
+
     st.session_state.df_roadmap = edited_df
 
     st.session_state.ref_verbruik = huidig_ref
 
-    st.sidebar.success("✅ Opgeslagen in SQLite")
+ 
+
+    st.sidebar.success("✅ Opgeslagen + CSV-backup gemaakt")
 
     st.rerun()
 
  
 
-# -----------------------------
+# =============================
 
-# 7. Berekeningen grafiek
+# 7. Grafiekberekening
 
-# -----------------------------
+# =============================
 
 df_grouped = edited_df.groupby("Jaar")["Besparing (Ton)"].sum().reset_index()
 
@@ -316,11 +356,13 @@ fig.add_trace(go.Scatter(
 
     mode="lines+markers",
 
-    name="Prognose",
+    fill="tozeroy",
 
-    fill="tozeroy"
+    name="Prognose"
 
 ))
+
+ 
 
 fig.update_layout(
 
@@ -336,11 +378,11 @@ st.plotly_chart(fig, use_container_width=True)
 
  
 
-# -----------------------------
+# =============================
 
 # 8. Metrics
 
-# -----------------------------
+# =============================
 
 tot_besparing = edited_df["Besparing (Ton)"].sum()
 
@@ -353,3 +395,5 @@ st.metric(
     delta=f"{len(edited_df)} projecten"
 
 )
+
+``
