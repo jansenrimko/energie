@@ -395,5 +395,3 @@ st.metric(
     delta=f"{len(edited_df)} projecten"
 
 )
-
-``
